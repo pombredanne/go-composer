@@ -110,6 +110,9 @@ func contains_int(what string, list []int) bool {
 type Serializer struct {
     Name string
 }
+func (this *Serializer) mimetype() string {
+	return "application/xml"
+}
 func (this *Serializer) render(vods []VodJson) string {
     switch this.Name {
     case "tv/12":
@@ -143,43 +146,41 @@ func (this *Conclusion) getComposer() Composer {
     page := this.Form.Get("page")
     per_page := this.Form.Get("perpage")
 
-    //log.Printf("Serializer:%s Sort:%s Ctx:%s", serializer, sorting, context)
-
     switch serializer {
-    case "tv/12":
-        return Composer{Serializer: Serializer{Name: "tv/12"}, Sorting: sorting, Context: context, Page: page, PerPage: per_page}
-    case "pc/85":
-        return Composer{Serializer: Serializer{Name: "pc/85"}, Sorting: sorting, Context: context, Page: page, PerPage: per_page}
+    case "tv/12", "pc/85":
+        return Composer{Serializer: Serializer{Name: serializer}, Sorting: sorting, Context: context, Page: page, PerPage: per_page}
     }
     return Composer{Serializer: Serializer{Name: "default"}, Sorting: sorting, Context: context, Page: page, PerPage: per_page}
 }
 
+func log_request(start time.Time, request *http.Request) {
+    log.Printf("\"%s %s\" %s \"%s\" %s",
+		request.Method,
+		request.URL.Path,
+		request.Proto,
+		request.UserAgent(),
+        time.Since(start),
+    )
+}
 
 func compose(res http.ResponseWriter, req *http.Request) {
-    start := time.Now()
+    defer log_request(time.Now(), req)
 
     req.ParseForm()
-    //log.Printf("Params: %s", req.Form)
 
-    res.Header().Set(
-        "Content-Type",
-        "application/xml",
-    )
+	conclusion := Conclusion{Form: req.Form}
+	composer := conclusion.getComposer()
 
-    conclusion := Conclusion{Form: req.Form}
-    composer := conclusion.getComposer()
+	res.Header().Set(
+		"Content-Type",
+		composer.Serializer.mimetype(),
+	)
+
 
     io.WriteString(
         res,
         composer.render(),
     )
-
-    log.Printf("\"%s %s\" %s \"%s\" %s",
-            req.Method,
-            req.URL.Path,
-            req.Proto,
-            req.UserAgent(),
-            time.Since(start))
 }
 
 
