@@ -1,6 +1,8 @@
 PROJECT_DIR=$(shell pwd)
 GOPATH=$(PROJECT_DIR)/libs:$(PROJECT_DIR)
 
+# https://github.com/webrocket/webrocket/blob/master/Makefile
+
 all: build clean
 
 help:
@@ -13,6 +15,12 @@ clean:
 
 build:
 	GOPATH=$(GOPATH) go build compositor
+
+fmt:
+	GOPATH=$(GOPATH) go fmt compositor
+
+doc:
+	GOPATH=$(GOPATH) go doc compositor
 
 #get:
 #	GOPATH=$(GOPATH) go get github.com/ugorji/go/codec

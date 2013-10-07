@@ -1,206 +1,241 @@
 package main
+
 import (
-  "log"
-  "net/http"
-  "net/url"
-  "io"
-  "os"
-  "flag"
-  "fmt"
-  "path/filepath"
-  "io/ioutil"
-  "encoding/json"
-  "strconv"
-  "bytes"   // http://stackoverflow.com/questions/1760757/how-to-efficiently-concatenate-strings-in-go
-  "time"
+	"bytes" // http://stackoverflow.com/questions/1760757/how-to-efficiently-concatenate-strings-in-go
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
+	"time"
 )
 
 // http://openmymind.net/Golang-Hot-Configuration-Reload/
+// http://synflood.at/tmp/golang-slides/mrmcd2012.html#52
+// https://code.google.com/p/go-wiki/wiki/SliceTricks
+// http://golang.org/doc/effective_go.html
+// http://www.golang-book.com/
+// http://jan.newmarch.name/go/
+// https://gobyexample.com/
+// http://tip.golang.org/ref/spec
 
-// filter
-// calculate
-// chunk
-// serialize
-
-
-// api_ver, serialization_type, filter_func, sortedby, catid
+type Vod struct {
+	Id         int
+	Title      string
+	Categories []int
+}
 
 // {"data": [{"id": 12, "order": [1, 2, 3]}, {"id": 3, "order": [2, 1, 3]}]}
 type SortingJson struct {
-    Data []SingleSortingData
+	Data []SingleSortingData
 }
 type SingleSortingData struct {
-    Id int
-    Order []int
+	Id    int
+	Order []int
 }
 
-type VodJson struct {
-    Id int
-    Title string
-    Categories []int
+// Serializer interface
+type Serializer interface {
+	render(sorting int, category int, page int, per_page int) string
+	mimetype() string
 }
 
+// Default Serializer
+type DefaultSerializer struct{}
 
+// Load sorting order
+func (this DefaultSerializer) load_sorting(sorting int) []int {
+	// Czytamy plik
+	if file, err := ioutil.ReadFile("./static/sorting.json"); err == nil {
+		// Ladujemy JSONa
+		var sorting_json SortingJson
+		if err := json.Unmarshal(file, &sorting_json); err == nil {
 
-type Composer struct {
-    Serializer Serializer
-    Sorting string
-    Context string
-    Page string
-    PerPage string
-}
-func (this *Composer) render() string {
-    file, err := ioutil.ReadFile("./static/sorting.json")
-    if err != nil {
-        log.Printf("Couldn't load sorting.json: %v\n", err)
-        return ""
-    }
-    //log.Printf("sorting.json loaded: %s\n", string(file))
-    var sorting_json SortingJson
-    e := json.Unmarshal(file, &sorting_json)
-    if e != nil {
-        log.Printf("Couldn't unmarshal sorting.json: %v\n", e)
-        return ""
-    }
-
-    var ordering []int
-    for i := 0; i < len(sorting_json.Data); i++ {
-        if strconv.Itoa(sorting_json.Data[i].Id) == this.Sorting {
-            ordering = sorting_json.Data[i].Order
-            break
-        }
-    }
-    //log.Printf("Selected ordering: %v", ordering)
-
-
-
-    // next step is to load vods and filter them out
-    var vods []VodJson
-    for i := 0; i < len(ordering); i++ {
-        file, err := ioutil.ReadFile(fmt.Sprintf("./static/vods/%d.json", ordering[i]))
-        if err != nil {
-            log.Printf("Couldn't load vods/%d.json: %v\n", ordering[i], err)
-            continue
-        }
-        var vod_json VodJson
-        e := json.Unmarshal(file, &vod_json)
-        if e != nil {
-            log.Printf("Couldn't unmarshal vods/%d.json: %v\n", ordering[i], e)
-            continue
-        }
-
-        // filter out
-        if this.Context != "" && contains_int(this.Context, vod_json.Categories) {
-            vods = append(vods, vod_json)
-        }
-    }
-    //log.Printf("vods: %v", vods)
-    return this.Serializer.render(vods)
+			// Przeszukujemy dostepne w pliku sortowania w poszukiwaniu naszego
+			for i := range sorting_json.Data {
+				if sorting_json.Data[i].Id == sorting {
+					return sorting_json.Data[i].Order
+				}
+			}
+			log.Printf("ERROR Sorting %v not found", sorting)
+		} else {
+			log.Printf("ERROR %v", err)
+		}
+	} else {
+		log.Printf("ERROR %v", err)
+	}
+	return []int{}
 }
 
-func contains_int(what string, list []int) bool {
-    for j := 0; j < len(list); j++ {
-        if what == strconv.Itoa(list[j]) {
-            return true
-        }
-    }
-    return false
+// Load vods
+func (this DefaultSerializer) load_vods(vod_ids []int, category int, page int, per_page int) []Vod {
+	vods := []Vod{}
+	for i := range vod_ids {
+		if file, err := ioutil.ReadFile(fmt.Sprintf("./static/vods/%d.json", vod_ids[i])); err == nil {
+			var vod Vod
+			if err := json.Unmarshal(file, &vod); err == nil {
+				if this.valid_vod(vod, category) {
+					vods = append(vods, vod)
+				}
+			} else {
+				log.Printf("ERROR %v", err)
+			}
+		} else {
+			log.Printf("ERROR %v", err)
+		}
+	}
+
+	start := (page - 1) * per_page
+	stop := start + per_page
+	if start > len(vods) {
+		return []Vod{}
+	}
+	if stop > len(vods) {
+		stop = len(vods)
+	}
+
+	return vods[start:stop]
 }
 
-type Serializer struct {
-    Name string
+// Check if vod is valid
+func (this DefaultSerializer) valid_vod(vod Vod, category int) bool {
+	return true
 }
-func (this *Serializer) mimetype() string {
+func (this DefaultSerializer) render(sorting int, category int, page int, per_page int) string {
+	return "Empty"
+}
+func (this DefaultSerializer) mimetype() string {
+	return "text/plain"
+}
+
+// XML Serializer
+type XMLSerializer struct {
+	DefaultSerializer
+}
+
+func (this XMLSerializer) render(sorting int, category int, page int, per_page int) string {
+	return "<vods />"
+}
+func (this XMLSerializer) mimetype() string {
 	return "application/xml"
 }
-func (this *Serializer) render(vods []VodJson) string {
-    switch this.Name {
-    case "tv/12":
-        return this.tv12(vods)
-    case "pc/85":
-        return this.pc85(vods)
-    }
-    return ""
-}
-func (this *Serializer) tv12(vods []VodJson) string {
-    var buffer bytes.Buffer
-    buffer.WriteString("<vods>")
-    for i := 0; i < len(vods); i++ {
-        buffer.WriteString(fmt.Sprintf("<vod id=\"%d\" title=\"%s\" />", vods[i].Id, vods[i].Title))
-    }
-    buffer.WriteString("</vods>")
-    return buffer.String()
-}
-func (this *Serializer) pc85(vods []VodJson) string {
-    return ""
+
+// JSON Serializer
+type JSONSerializer struct {
+	DefaultSerializer
 }
 
-type Conclusion struct {
-    Form url.Values
-
+func (this JSONSerializer) render(sorting int, category int, page int, per_page int) string {
+	return "{\"vods\": []}"
 }
-func (this *Conclusion) getComposer() Composer {
-    serializer := this.Form.Get("serializer")   // serialization: tv, pc, mobile
-    sorting := this.Form.Get("sorting") // sort: need only to load vods in right order
-    context := this.Form.Get("context") // filter: need to know which category
-    page := this.Form.Get("page")
-    per_page := this.Form.Get("perpage")
+func (this JSONSerializer) mimetype() string {
+	return "application/json"
+}
 
-    switch serializer {
-    case "tv/12", "pc/85":
-        return Composer{Serializer: Serializer{Name: serializer}, Sorting: sorting, Context: context, Page: page, PerPage: per_page}
-    }
-    return Composer{Serializer: Serializer{Name: "default"}, Sorting: sorting, Context: context, Page: page, PerPage: per_page}
+// Ipla
+type Ipla300Serializer struct {
+	XMLSerializer
+}
+
+func (this Ipla300Serializer) render(sorting int, category int, page int, per_page int) string {
+	vod_ids := this.load_sorting(sorting)
+	vods := this.load_vods(vod_ids, category, page, per_page)
+	var buffer bytes.Buffer
+	buffer.WriteString("<vods>")
+	for i := range vods {
+		buffer.WriteString(fmt.Sprintf("<vod id=\"%d\" title=\"%s\" />", vods[i].Id, vods[i].Title))
+	}
+	buffer.WriteString("</vods>")
+	return buffer.String()
+}
+
+// Samsung
+type Samsung20Serializer struct {
+	JSONSerializer
+}
+
+func (this Samsung20Serializer) render(sorting int, category int, page int, per_page int) string {
+	return "{\"vods\": [{\"id\": 3}]}"
+}
+
+func get_serializer(client_name string, client_build int) Serializer {
+	if contains_str(client_name, []string{"ipla"}) {
+		switch {
+		case client_build > 300:
+			return Ipla300Serializer{}
+		default:
+			return DefaultSerializer{}
+		}
+	} else if contains_str(client_name, []string{"tv_samsung"}) {
+		return Samsung20Serializer{}
+	}
+	return DefaultSerializer{}
+}
+
+func contains_str(what string, list []string) bool {
+	for j := 0; j < len(list); j++ {
+		if what == list[j] {
+			return true
+		}
+	}
+	return false
+}
+
+func compose_params(Form url.Values) (string, int, int, int, int, int) {
+	client_name := Form.Get("client_name")
+	client_build, _ := strconv.Atoi(Form.Get("client_build")) // defaults to 0
+	sorting, _ := strconv.Atoi(Form.Get("sorting"))
+	category, _ := strconv.Atoi(Form.Get("category"))
+	page, _ := strconv.Atoi(Form.Get("page"))
+	per_page, _ := strconv.Atoi(Form.Get("per_page"))
+	log.Printf("DEBUG client_name=%v client_build=%v sorting=%v category=%v page=%v per_page=%v",
+		client_name, client_build, sorting, category, page, per_page)
+	return client_name, client_build, sorting, category, page, per_page
 }
 
 func log_request(start time.Time, request *http.Request) {
-    log.Printf("\"%s %s\" %s \"%s\" %s",
+	log.Printf("\"%s %s\" %s \"%s\" %s",
 		request.Method,
 		request.URL.Path,
 		request.Proto,
 		request.UserAgent(),
-        time.Since(start),
-    )
+		time.Since(start),
+	)
 }
 
 func compose(res http.ResponseWriter, req *http.Request) {
-    defer log_request(time.Now(), req)
+	defer log_request(time.Now(), req)
 
-    req.ParseForm()
+	req.ParseForm()
+	client_name, client_build, sorting, category, page, per_page := compose_params(req.Form)
+	serializer := get_serializer(client_name, client_build) // pass conf
 
-	conclusion := Conclusion{Form: req.Form}
-	composer := conclusion.getComposer()
-
-	res.Header().Set(
-		"Content-Type",
-		composer.Serializer.mimetype(),
-	)
-
-
-    io.WriteString(
-        res,
-        composer.render(),
-    )
+	res.Header().Set("Content-Type", serializer.mimetype())
+	log.Printf("Content-Type: %v", res.Header().Get("Content-Type"))
+	io.WriteString(res, serializer.render(sorting, category, page, per_page))
 }
 
-
 func main() {
-  //arguments := os.Args
-  //fmt.Println(arguments)
-  port_ptr := flag.Int("port", 9000, "Port number")
-  path_ptr := flag.String("path", "static", "Path to static folder")
-  flag.Parse()
+	port_ptr := flag.Int("port", 9000, "Port number")
+	path_ptr := flag.String("path", "static", "Path to static folder")
+	flag.Parse()
 
-  static_path, error := filepath.Abs(*path_ptr)
-  if error != nil {
-    fmt.Printf(error.Error())
-    os.Exit(2)
-  }
+	static_path, error := filepath.Abs(*path_ptr)
+	if error != nil {
+		fmt.Printf(error.Error())
+		os.Exit(2)
+	}
 
-  http.HandleFunc("/compose", compose)
+	http.HandleFunc("/compose", compose)
 
-  log.Printf("Static path: %s", static_path)
-  log.Printf("Starting server on :%d", *port_ptr)
-  log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *port_ptr), nil))
-  os.Exit(1)
+	log.Printf("Static path: %s", static_path)
+	log.Printf("Starting server on :%d", *port_ptr)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *port_ptr), nil))
+	os.Exit(1)
 }
