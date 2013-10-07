@@ -16,6 +16,7 @@ import (
 	"time"
 )
 
+// http://blog.repustate.com/migrating-code-from-python-to-golang-what-you-need-to-know/2013/04/23/
 // http://openmymind.net/Golang-Hot-Configuration-Reload/
 // http://synflood.at/tmp/golang-slides/mrmcd2012.html#52
 // https://code.google.com/p/go-wiki/wiki/SliceTricks
@@ -75,6 +76,12 @@ func (this DefaultSerializer) load_sorting(sorting int) []int {
 
 // Load vods
 func (this DefaultSerializer) load_vods(vod_ids []int, category int, page int, per_page int) []Vod {
+	start := (page - 1) * per_page
+    stop := start + per_page
+    if stop > len(vod_ids) {
+        stop = len(vod_ids)
+    }
+    
 	vods := []Vod{}
 	for i := range vod_ids {
 		if file, err := ioutil.ReadFile(fmt.Sprintf("./static/vods/%d.json", vod_ids[i])); err == nil {
@@ -82,6 +89,9 @@ func (this DefaultSerializer) load_vods(vod_ids []int, category int, page int, p
 			if err := json.Unmarshal(file, &vod); err == nil {
 				if this.valid_vod(vod, category) {
 					vods = append(vods, vod)
+                    if len(vods) >= stop {
+                        return vods
+                    }
 				}
 			} else {
 				log.Printf("ERROR %v", err)
@@ -90,9 +100,8 @@ func (this DefaultSerializer) load_vods(vod_ids []int, category int, page int, p
 			log.Printf("ERROR %v", err)
 		}
 	}
-
-	start := (page - 1) * per_page
-	stop := start + per_page
+	
+	
 	if start > len(vods) {
 		return []Vod{}
 	}
@@ -194,8 +203,8 @@ func compose_params(Form url.Values) (string, int, int, int, int, int) {
 	category, _ := strconv.Atoi(Form.Get("category"))
 	page, _ := strconv.Atoi(Form.Get("page"))
 	per_page, _ := strconv.Atoi(Form.Get("per_page"))
-	log.Printf("DEBUG client_name=%v client_build=%v sorting=%v category=%v page=%v per_page=%v",
-		client_name, client_build, sorting, category, page, per_page)
+	// log.Printf("DEBUG client_name=%v client_build=%v sorting=%v category=%v page=%v per_page=%v",
+	// 	client_name, client_build, sorting, category, page, per_page)
 	return client_name, client_build, sorting, category, page, per_page
 }
 
@@ -217,7 +226,6 @@ func compose(res http.ResponseWriter, req *http.Request) {
 	serializer := get_serializer(client_name, client_build) // pass conf
 
 	res.Header().Set("Content-Type", serializer.mimetype())
-	log.Printf("Content-Type: %v", res.Header().Get("Content-Type"))
 	io.WriteString(res, serializer.render(sorting, category, page, per_page))
 }
 
