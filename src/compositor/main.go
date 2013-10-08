@@ -77,11 +77,11 @@ func (this DefaultSerializer) load_sorting(sorting int) []int {
 // Load vods
 func (this DefaultSerializer) load_vods(vod_ids []int, category int, page int, per_page int) []Vod {
 	start := (page - 1) * per_page
-    stop := start + per_page
-    if stop > len(vod_ids) {
-        stop = len(vod_ids)
-    }
-    
+	stop := start + per_page
+	if stop > len(vod_ids) {
+		stop = len(vod_ids)
+	}
+
 	vods := []Vod{}
 	for i := range vod_ids {
 		if file, err := ioutil.ReadFile(fmt.Sprintf("./static/vods/%d.json", vod_ids[i])); err == nil {
@@ -89,9 +89,9 @@ func (this DefaultSerializer) load_vods(vod_ids []int, category int, page int, p
 			if err := json.Unmarshal(file, &vod); err == nil {
 				if this.valid_vod(vod, category) {
 					vods = append(vods, vod)
-                    if len(vods) >= stop {
-                        return vods
-                    }
+					if len(vods) >= stop {
+						return vods
+					}
 				}
 			} else {
 				log.Printf("ERROR %v", err)
@@ -100,8 +100,7 @@ func (this DefaultSerializer) load_vods(vod_ids []int, category int, page int, p
 			log.Printf("ERROR %v", err)
 		}
 	}
-	
-	
+
 	if start > len(vods) {
 		return []Vod{}
 	}
