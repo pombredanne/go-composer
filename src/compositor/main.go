@@ -32,14 +32,7 @@ type Vod struct {
 	Categories []int
 }
 
-// {"data": [{"id": 12, "order": [1, 2, 3]}, {"id": 3, "order": [2, 1, 3]}]}
-type SortingJson struct {
-	Data []SingleSortingData
-}
-type SingleSortingData struct {
-	Id    int
-	Order []int
-}
+type Sorting map[string][]int
 
 // Serializer interface
 type Serializer interface {
@@ -55,16 +48,14 @@ func (this DefaultSerializer) load_sorting(sorting int) []int {
 	// Czytamy plik
 	if file, err := ioutil.ReadFile("./static/sorting.json"); err == nil {
 		// Ladujemy JSONa
-		var sorting_json SortingJson
+		var sorting_json Sorting
 		if err := json.Unmarshal(file, &sorting_json); err == nil {
 
-			// Przeszukujemy dostepne w pliku sortowania w poszukiwaniu naszego
-			for i := range sorting_json.Data {
-				if sorting_json.Data[i].Id == sorting {
-					return sorting_json.Data[i].Order
-				}
+			if val, ok := sorting_json[strconv.Itoa(sorting)]; ok == true {
+				return val
+			} else {
+				log.Printf("ERROR Sorting %v not found: %v", sorting, ok)
 			}
-			log.Printf("ERROR Sorting %v not found", sorting)
 		} else {
 			log.Printf("ERROR %v", err)
 		}
@@ -90,7 +81,7 @@ func (this DefaultSerializer) load_vods(vod_ids []int, category int, page int, p
 				if this.valid_vod(vod, category) {
 					vods = append(vods, vod)
 					if len(vods) >= stop {
-						return vods
+						return vods[start:]
 					}
 				}
 			} else {
@@ -175,7 +166,7 @@ func (this Samsung20Serializer) render(sorting int, category int, page int, per_
 func get_serializer(client_name string, client_build int) Serializer {
 	if contains_str(client_name, []string{"ipla"}) {
 		switch {
-		case client_build > 300:
+		case client_build > 299:
 			return Ipla300Serializer{}
 		default:
 			return DefaultSerializer{}

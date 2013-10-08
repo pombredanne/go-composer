@@ -23,7 +23,7 @@ def store_vod(i):
                 CATEGORIES,
                 random.randint(1, 2))
         },
-        open('./static/vods%s.json' % i, 'w')
+        open('./static/vods/%s.json' % i, 'w')
     )
 
 
